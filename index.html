@@ -476,36 +476,92 @@
             canvas.addEventListener('mouseup', stopDrawing);
             canvas.addEventListener('mouseout', stopDrawing);
             
-            // Eventos de toque para dispositivos móveis
-            canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
-            canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
-            canvas.addEventListener('touchend', handleTouchEnd);
+            // Eventos de toque para dispositivos móveis - CÓDIGO CORRIGIDO
+            let lastTouchX = 0;
+            let lastTouchY = 0;
             
-            function handleTouchStart(e) {
+            canvas.addEventListener('touchstart', function(e) {
                 e.preventDefault();
                 const touch = e.touches[0];
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+                
+                lastTouchX = (touch.clientX - rect.left) * scaleX;
+                lastTouchY = (touch.clientY - rect.top) * scaleY;
+                
                 const mouseEvent = new MouseEvent('mousedown', {
                     clientX: touch.clientX,
-                    clientY: touch.clientY
+                    clientY: touch.clientY,
+                    bubbles: true
                 });
                 canvas.dispatchEvent(mouseEvent);
-            }
+            }, { passive: false });
             
-            function handleTouchMove(e) {
+            canvas.addEventListener('touchmove', function(e) {
                 e.preventDefault();
                 const touch = e.touches[0];
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+                
+                lastTouchX = (touch.clientX - rect.left) * scaleX;
+                lastTouchY = (touch.clientY - rect.top) * scaleY;
+                
                 const mouseEvent = new MouseEvent('mousemove', {
                     clientX: touch.clientX,
-                    clientY: touch.clientY
+                    clientY: touch.clientY,
+                    bubbles: true
                 });
                 canvas.dispatchEvent(mouseEvent);
-            }
+            }, { passive: false });
             
-            function handleTouchEnd(e) {
+            canvas.addEventListener('touchend', function(e) {
                 e.preventDefault();
-                const mouseEvent = new MouseEvent('mouseup', {});
-                canvas.dispatchEvent(mouseEvent);
-            }
+                
+                // Usar as últimas coordenadas conhecidas do touchmove
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+                
+                // Criar um objeto de evento com as últimas coordenadas válidas
+                const fakeEvent = {
+                    clientX: (lastTouchX / scaleX) + rect.left,
+                    clientY: (lastTouchY / scaleY) + rect.top
+                };
+                
+                // Chamar stopDrawing diretamente com o evento fake
+                const rect2 = canvas.getBoundingClientRect();
+                const scaleX2 = canvas.width / rect2.width;
+                const scaleY2 = canvas.height / rect2.height;
+                
+                const x = (fakeEvent.clientX - rect2.left) * scaleX2;
+                const y = (fakeEvent.clientY - rect2.top) * scaleY2;
+                
+                if (isDrawing) {
+                    if (currentTool === 'select') {
+                        isDrawing = false;
+                    } else if (['line', 'union', 'offspring'].includes(currentTool)) {
+                        elements.push({
+                            type: currentTool,
+                            x1: startX,
+                            y1: startY,
+                            x2: x,
+                            y2: y
+                        });
+                        isDrawing = false;
+                        redrawCanvas();
+                    } else {
+                        elements.push({
+                            type: currentTool,
+                            x: startX,
+                            y: startY
+                        });
+                        isDrawing = false;
+                        redrawCanvas();
+                    }
+                }
+            });
             
             // Botões de ação
             clearBtn.addEventListener('click', clearCanvas);
@@ -570,21 +626,28 @@
                 }
             }
             
-            function stopDrawing() {
+            function stopDrawing(e) {
                 if (!isDrawing) return;
                 
-                const rect = canvas.getBoundingClientRect();
-                const scaleX = canvas.width / rect.width;
-                const scaleY = canvas.height / rect.height;
+                // Se não houver evento (no caso de touchend), usar valores padrão
+                let x, y;
                 
-                const x = (event.clientX - rect.left) * scaleX;
-                const y = (event.clientY - rect.top) * scaleY;
+                if (e && e.clientX !== undefined && e.clientY !== undefined) {
+                    const rect = canvas.getBoundingClientRect();
+                    const scaleX = canvas.width / rect.width;
+                    const scaleY = canvas.height / rect.height;
+                    
+                    x = (e.clientX - rect.left) * scaleX;
+                    y = (e.clientY - rect.top) * scaleY;
+                } else {
+                    // Usar as últimas coordenadas conhecidas
+                    x = startX;
+                    y = startY;
+                }
                 
                 if (currentTool === 'select') {
-                    // Finalizar movimento
                     isDrawing = false;
                 } else if (['line', 'union', 'offspring'].includes(currentTool)) {
-                    // Adicionar linha permanente
                     elements.push({
                         type: currentTool,
                         x1: startX,
@@ -595,7 +658,6 @@
                     isDrawing = false;
                     redrawCanvas();
                 } else {
-                    // Adicionar símbolo
                     elements.push({
                         type: currentTool,
                         x: startX,
